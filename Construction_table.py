@@ -110,6 +110,6 @@ class Construction_table:
             h.remove()
 
         self.construction_table[-1]["feature_pixels"] = self.construction_table[-2]["feature_pixels"]
-        return self.construction_table
+        return self.construction_table, self.last_conv_layer
 
 
