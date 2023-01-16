@@ -3,23 +3,33 @@ import math
 import torch
 import torch.nn as nn
 
+device = "cuda"
+device = device.lower()
+assert device in [
+    "cuda",
+    "cpu",
+], "Input device is not valid, please specify 'cuda' or 'cpu'"
 
-model = None
-number_of_classes = None
-construction_table =[]
+if device == "cuda" and torch.cuda.is_available():
+    dtype = torch.cuda.FloatTensor
+else:
+    dtype = torch.FloatTensor
 
-idx = 0
-last_conv_layer = 0
-stop_checking = False
+class Construction_table:
 
-def get_table(model, input_size, batch_size=-1, device="cuda"):
-    global idx, last_conv_layer,stop_checking
+    def __init__(self, model, number_of_classes):
+        self.model = model
+        self.number_of_classes = number_of_classes
+        self.construction_table =[]
+        self.idx = 0
+        self.last_conv_layer = 0
+        self.stop_checking = False
+        self.hooks = []
 
-    def get_first_idx(module):
-        global idx
-        idx = 0
+    def get_first_idx(self,module):
+        self.idx = 0
+
         def hook(module, input, output):
-            global stop_checking, last_conv_layer, idx
             class_name = str(module.__class__).split(".")[-1].split("'")[0]
             if isinstance(output, (list, tuple)):
                 output_shape = [
@@ -27,27 +37,27 @@ def get_table(model, input_size, batch_size=-1, device="cuda"):
                 ]
             else:
                 output_shape = list(output.size())
-                output_shape[0] = batch_size
-            if class_name == "Conv2d" and (not stop_checking):
-                last_conv_layer = idx
+                #batch size
+                output_shape[0] = -1
+            if class_name == "Conv2d" and (not self.stop_checking):
+                self.last_conv_layer = self.idx
             try:
-                if output_shape[2] <= math.sqrt(number_of_classes):
-                    stop_checking = True
+                self.stop_checking = output_shape[2] <= math.sqrt(self.number_of_classes)
             except:
                 pass
-            idx += 1
-        if (
-            not isinstance(module, nn.Sequential)
-            and not isinstance(module, nn.ModuleList)
-            and not (module == model)
-        ):
-            hooks.append(module.register_forward_hook(hook))
+            self.idx += 1
 
-    def get_construction_table(module):
-        global idx
-        idx = 0
+        if (
+                not isinstance(module, nn.Sequential)
+                and not isinstance(module, nn.ModuleList)
+                and not (module == self.model)
+        ):
+            self.hooks.append(module.register_forward_hook(hook))
+
+    def get_construction_table(self, module):
+        self.idx = 0
+
         def hook(module, input, output):
-            global stop_checking, last_conv_layer, idx
             class_name = str(module.__class__).split(".")[-1].split("'")[0]
             if isinstance(output, (list, tuple)):
                 output_shape = [
@@ -55,72 +65,51 @@ def get_table(model, input_size, batch_size=-1, device="cuda"):
                 ]
             else:
                 output_shape = list(output.size())
-                output_shape[0] = batch_size
+                #batch size
+                output_shape[0] = -1
             if class_name == "Conv2d":
-                if idx>=last_conv_layer:
-                    if not construction_table:
-                        number_of_weights = torch.prod(torch.LongTensor(list(module.weight.size())))
-                        construction_table.append({"number_of_weights":number_of_weights,"feature_pixels":0})
+                if self.idx >= self.last_conv_layer:
+                    if not self.construction_table:
+                        number_of_weights = torch.prod(torch.LongTensor(list(module.weight.size()))).item()
+                        self.construction_table.append({"number_of_weights": number_of_weights, "feature_pixels": 0})
                     else:
-                        number_of_weights = torch.prod(torch.LongTensor(list(module.weight.size())))
-                        feature_pixels_of_previous_convolution = list(input[0].size())[1]*list(input[0].size())[2]*list(input[0].size())[3]
-                        construction_table[-1]["feature_pixels"] = feature_pixels_of_previous_convolution
-                        construction_table.append({"number_of_weights": number_of_weights, "feature_pixels": 0})
-                    # pixels = output_shape[3] * output_shape[1] * output_shape[2]
-                    # new_out_channels = pixels // number_of_classes
-                    # old_parameters = torch.prod(torch.LongTensor(list(module.weight.size())))
-                    # new_kernel = math.sqrt(old_parameters/(list(input[0].size())[1]*new_out_channels))
-                    # if not new_conv_layers:
-                    #     new_conv_layers.append({"input_channels": list(input[0].size())[1], "output_channels":new_out_channels, "kernel_size":new_kernel})
-                    # else:
-                    #     new_input_channels = new_conv_layers[-1]["output_channels"]
-                    #     new_conv_layers.append({"input_channels": new_input_channels, "output_channels":new_out_channels, "kernel_size":new_kernel})
-            idx += 1
+                        number_of_weights = torch.prod(torch.LongTensor(list(module.weight.size()))).item()
+                        feature_pixels_of_previous_convolution = list(input[0].size())[1] * list(input[0].size())[2] * \
+                                                                 list(input[0].size())[3]
+                        self.construction_table[-1]["feature_pixels"] = feature_pixels_of_previous_convolution
+                        self.construction_table.append({"number_of_weights": number_of_weights, "feature_pixels": 0})
+            self.idx += 1
 
         if (
-            not isinstance(module, nn.Sequential)
-            and not isinstance(module, nn.ModuleList)
-            and not (module == model)
+                not isinstance(module, nn.Sequential)
+                and not isinstance(module, nn.ModuleList)
+                and not (module == self.model)
         ):
-            hooks.append(module.register_forward_hook(hook))
+            self.hooks.append(module.register_forward_hook(hook))
 
-    device = device.lower()
-    assert device in [
-        "cuda",
-        "cpu",
-    ], "Input device is not valid, please specify 'cuda' or 'cpu'"
+    def get_table(self,model, input_size, batch_size=-1):
+        # multiple inputs to the network
+        if isinstance(input_size, tuple):
+            input_size = [input_size]
 
-    if device == "cuda" and torch.cuda.is_available():
-        dtype = torch.cuda.FloatTensor
-    else:
-        dtype = torch.FloatTensor
+        # batch_size of 2 for batchnorm
+        x = [torch.rand(2, *in_size).type(dtype) for in_size in input_size]
 
-    # multiple inputs to the network
-    if isinstance(input_size, tuple):
-        input_size = [input_size]
+        # get_first_idx
+        model.apply(self.get_first_idx)
+        model(*x)
+        # remove these hooks
+        for h in self.hooks:
+            h.remove()
 
-    # batch_size of 2 for batchnorm
-    x = [torch.rand(2, *in_size).type(dtype) for in_size in input_size]
-    hooks = []
+        # register hook
+        model.apply(self.get_construction_table)
+        model(*x)
+        # remove these hooks
+        for h in self.hooks:
+            h.remove()
 
-    # get_first_idx
-    model.apply(get_first_idx)
-    model(*x)
-    # remove these hooks
-    for h in hooks:
-        h.remove()
+        self.construction_table[-1]["feature_pixels"] = self.construction_table[-2]["feature_pixels"]
+        return self.construction_table
 
-    # register hook
-    model.apply(get_construction_table)
-    model(*x)
-    # remove these hooks
-    for h in hooks:
-        h.remove()
 
-    construction_table[-1]["feature_pixels"] = construction_table[-2]["feature_pixels"]
-    return construction_table
-
-def set_model(model_name,classes):
-    global model, number_of_classes
-    model = model_name
-    number_of_classes = classes
