@@ -16,7 +16,7 @@ import numpy as np
 
 model = ResNet()
 number_of_classes = 100
-new_conv_layers =[]
+construction_table =[]
 
 idx = 0
 last_conv_layer = 0
@@ -53,7 +53,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         ):
             hooks.append(module.register_forward_hook(hook))
 
-    def register_hook_get_fatnet(module):
+    def get_construction_table(module):
         global idx
         idx = 0
         def hook(module, input, output):
@@ -68,15 +68,23 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
                 output_shape[0] = batch_size
             if class_name == "Conv2d":
                 if idx>=last_conv_layer:
-                    pixels = output_shape[3] * output_shape[1] * output_shape[2]
-                    new_out_channels = pixels // number_of_classes
-                    old_parameters = torch.prod(torch.LongTensor(list(module.weight.size())))
-                    new_kernel = math.sqrt(old_parameters/(list(input[0].size())[1]*new_out_channels))
-                    if not new_conv_layers:
-                        new_conv_layers.append({"input_channels": list(input[0].size())[1], "output_channels":new_out_channels, "kernel_size":new_kernel})
+                    if not construction_table:
+                        number_of_weights = torch.prod(torch.LongTensor(list(module.weight.size())))
+                        construction_table.append({"number_of_weights":number_of_weights,"feature_pixels":0})
                     else:
-                        new_input_channels = new_conv_layers[-1]["output_channels"]
-                        new_conv_layers.append({"input_channels": new_input_channels, "output_channels":new_out_channels, "kernel_size":new_kernel})
+                        number_of_weights = torch.prod(torch.LongTensor(list(module.weight.size())))
+                        feature_pixels_of_previous_convolution = list(input[0].size())[1]*list(input[0].size())[2]*list(input[0].size())[3]
+                        construction_table[-1]["feature_pixels"] = feature_pixels_of_previous_convolution
+                        construction_table.append({"number_of_weights": number_of_weights, "feature_pixels": 0})
+                    # pixels = output_shape[3] * output_shape[1] * output_shape[2]
+                    # new_out_channels = pixels // number_of_classes
+                    # old_parameters = torch.prod(torch.LongTensor(list(module.weight.size())))
+                    # new_kernel = math.sqrt(old_parameters/(list(input[0].size())[1]*new_out_channels))
+                    # if not new_conv_layers:
+                    #     new_conv_layers.append({"input_channels": list(input[0].size())[1], "output_channels":new_out_channels, "kernel_size":new_kernel})
+                    # else:
+                    #     new_input_channels = new_conv_layers[-1]["output_channels"]
+                    #     new_conv_layers.append({"input_channels": new_input_channels, "output_channels":new_out_channels, "kernel_size":new_kernel})
             idx += 1
 
         if (
@@ -113,7 +121,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         h.remove()
 
     # register hook
-    model.apply(register_hook_get_fatnet)
+    model.apply(get_construction_table)
     model(*x)
     # remove these hooks
     for h in hooks:
@@ -122,5 +130,5 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
 
 
 summary(model, input_size=(3,32,32))
-for layer in new_conv_layers:
+for layer in construction_table:
     print(layer)
