@@ -1,3 +1,5 @@
+import torch
+
 from Spitter import Spitter
 import Construction_table
 from Construction_table import Construction_table
@@ -12,4 +14,7 @@ for layer in table:
     print(layer)
 spitter = Spitter(model,table,starting_point, 100)
 new_model = spitter.get_new_model()
+new_model.apply(lambda x: x)
+new_model(torch.rand([2,3,32,32]))
+summary(new_model,(3,32,32))
 summary(new_model,(3,32,32))
