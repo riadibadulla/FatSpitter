@@ -1,4 +1,3 @@
-from numpy import nan
 from torch.nn.modules.pooling import AdaptiveAvgPool2d
 import torch.nn as nn
 import torch.nn.functional as F

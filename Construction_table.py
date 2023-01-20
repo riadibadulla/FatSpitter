@@ -5,15 +5,15 @@ import torch.nn as nn
 
 device = "cuda"
 device = device.lower()
-assert device in [
-    "cuda",
-    "cpu",
-], "Input device is not valid, please specify 'cuda' or 'cpu'"
-
-if device == "cuda" and torch.cuda.is_available():
-    dtype = torch.cuda.FloatTensor
-else:
-    dtype = torch.FloatTensor
+# assert device in [
+#     "cuda",
+#     "cpu",
+# ], "Input device is not valid, please specify 'cuda' or 'cpu'"
+#
+# if device == "cuda" and torch.cuda.is_available():
+#     dtype = torch.cuda.FloatTensor
+# else:
+dtype = torch.FloatTensor
 
 class Construction_table:
 
@@ -87,14 +87,13 @@ class Construction_table:
         ):
             self.hooks.append(module.register_forward_hook(hook))
 
-    def get_table(self,model, input_size, batch_size=-1):
+    def __call__(self,model, input_size, batch_size=-1):
         # multiple inputs to the network
         if isinstance(input_size, tuple):
             input_size = [input_size]
 
         # batch_size of 2 for batchnorm
         x = [torch.rand(2, *in_size).type(dtype) for in_size in input_size]
-
         # get_first_idx
         model.apply(self.get_first_idx)
         model(*x)

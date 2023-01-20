@@ -1,9 +1,10 @@
 import copy
 from torch import nn
 import math
+from optnn import OpticalConv2d
 
 class Spitter:
-    def __init__(self,model,construction_table, starting_point, number_of_classes):
+    def __init__(self,model,construction_table, starting_point, number_of_classes, optical=False):
         self.starting_point = starting_point
         self.original_model = model
         self.construction_table = construction_table
@@ -12,6 +13,7 @@ class Spitter:
         self.i =0
         self.convolutional_iterator = 0
         self.next_input_channels = None
+        self.is_optical = optical
 
     def _replace_the_layer(self,model,n,new_layer):
         try:
@@ -43,7 +45,10 @@ class Spitter:
                         if new_kernel_size**2 > self.number_of_classes:
                             new_kernel_size = int(math.sqrt(self.number_of_classes))
                             new_output_channels = int(self.construction_table[self.convolutional_iterator]["number_of_weights"] //(new_input_channels*new_kernel_size**2))
-                        new_layer = nn.Conv2d(new_input_channels,new_output_channels,new_kernel_size,padding="same")
+                        if self.is_optical:
+                            new_layer = OpticalConv2d(new_input_channels,new_output_channels,new_kernel_size,True,True,input_size=int(math.sqrt(self.number_of_classes)))
+                        else:
+                            new_layer = nn.Conv2d(new_input_channels,new_output_channels,new_kernel_size,padding="same")
                         model = self._replace_the_layer(model,n,new_layer)
                         self.next_input_channels = new_output_channels
                         self.convolutional_iterator += 1
@@ -54,7 +59,7 @@ class Spitter:
         return model
 
 
-    def get_new_model(self):
+    def __call__(self):
         self.fatmodel = copy.deepcopy(self.original_model)
         self.fatmodel = self.replace_layers(self.fatmodel)
         self.fatmodel.zero_grad()
