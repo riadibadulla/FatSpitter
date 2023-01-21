@@ -1,4 +1,3 @@
-from models import ResNet
 import math
 import torch
 import torch.nn as nn
@@ -16,7 +15,13 @@ device = device.lower()
 dtype = torch.FloatTensor
 
 class Construction_table:
-
+    """
+    Class which obtains and saves the construction table
+    :param model: original model in PyTorch
+    :type: nn.Module
+    :param number_of_classes: number of classes in dataset
+    :type: int
+    """
     def __init__(self, model, number_of_classes):
         self.model = model
         self.number_of_classes = number_of_classes
@@ -27,9 +32,21 @@ class Construction_table:
         self.hooks = []
 
     def get_first_idx(self,module):
+        """
+        Get the index of the layer, after which the conversion to FatNet should start.
+        The function is applied to the model using model's apply() method.
+        :param module: model
+        :type nn.Module
+        """
         self.idx = 0
 
         def hook(module, input, output):
+            """
+            register hook for each non sequential layer. constructs the construction table
+            :param module: non sequential layer
+            :param input: input of the network
+            :param output: output of the network
+            """
             class_name = str(module.__class__).split(".")[-1].split("'")[0]
             if isinstance(output, (list, tuple)):
                 output_shape = [
@@ -55,9 +72,23 @@ class Construction_table:
             self.hooks.append(module.register_forward_hook(hook))
 
     def get_construction_table(self, module):
+        """
+        Gets construction table given the model and number of classes.
+        The function is applied to the model using model's apply() method. It takes the module and registers hooks for each
+        non sequential module.
+        :param module: model
+        :type nn.Module
+        """
         self.idx = 0
 
         def hook(module, input, output):
+            """
+            the hook function for each module. The function calculates the number of pixels in each feature map and
+            number of weights excluding bias in each convolutional layer starting from the required index.
+            :param module: each non sequential layer
+            :param input: input of each layer
+            :param output: output of each layer
+            """
             class_name = str(module.__class__).split(".")[-1].split("'")[0]
             if isinstance(output, (list, tuple)):
                 output_shape = [
@@ -88,6 +119,17 @@ class Construction_table:
             self.hooks.append(module.register_forward_hook(hook))
 
     def __call__(self,model, input_size, batch_size=-1):
+        """
+        The function takes the model, its input size and returns the construction table needed for the FatNet construction.
+        :param model: model, network
+        :type nn.Module
+        :param input_size: input shape of the network (channels,x,y)
+        :type tuple of int
+        :param batch_size: batch size
+        :type int
+        :return: constuction table and the the index of layer after which the construction of FatNet should start
+        :rtype list of dictionaries, int
+        """
         # multiple inputs to the network
         if isinstance(input_size, tuple):
             input_size = [input_size]
