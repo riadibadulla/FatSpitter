@@ -86,6 +86,12 @@ class Spitter:
                     if isinstance(module, nn.BatchNorm2d):
                         new_layer = nn.BatchNorm2d(self.next_input_channels)
                         model = self._replace_the_layer(model,n,new_layer)
+                    if isinstance(module, nn.Flatten):
+                        new_layer = nn.Identity()
+                        model = self._replace_the_layer(model,n,new_layer)
+                    if isinstance(module, nn.Linear):
+                        new_layer = nn.Conv2d(in_channels=self.next_input_channels,out_channels=1,kernel_size=int(math.sqrt(self.number_of_classes)),padding="same")
+                        model = self._replace_the_layer(model, n, new_layer)
                 self.i += 1
         return model
 
@@ -99,6 +105,5 @@ class Spitter:
         self.fatmodel = copy.deepcopy(self.original_model)
         self.fatmodel = self.replace_layers(self.fatmodel)
         self.fatmodel.zero_grad()
-        self.fatmodel._modules["classifier"] = nn.Identity()
         return self.fatmodel
 
