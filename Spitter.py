@@ -95,6 +95,16 @@ class Spitter:
                 self.i += 1
         return model
 
+    def add_flatten(self, model):
+        class new_model(nn.Module):
+            def __init__(self,model):
+                super().__init__()
+                self.one_layer = nn.Sequential(model, nn.Flatten())
+
+            def forward(self,x):
+                self.one_layer(x)
+
+        return new_model(model)
 
     def __call__(self):
         """
@@ -105,5 +115,7 @@ class Spitter:
         self.fatmodel = copy.deepcopy(self.original_model)
         self.fatmodel = self.replace_layers(self.fatmodel)
         self.fatmodel.zero_grad()
+        #Need to add another layer of flatten to make the network trainable for classification
+        self.fatmodel = self.add_flatten(self.fatmodel)
         return self.fatmodel
 
