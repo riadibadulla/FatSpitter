@@ -102,7 +102,8 @@ class Spitter:
                 self.one_layer = nn.Sequential(model, nn.Flatten())
 
             def forward(self,x):
-                self.one_layer(x)
+                x = self.one_layer(x)
+                return x
 
         return new_model(model)
 
