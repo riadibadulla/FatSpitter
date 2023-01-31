@@ -28,6 +28,11 @@ class Spitter:
         self.convolutional_iterator = 0
         self.next_input_channels = None
         self.is_optical = optical
+        self.reference_to_previous_layer = None
+        self.input_channels_of_previous_layer = None
+        self.first_refined_layer = True
+        self.index_of_conv_needs_replacement = None
+        self.output_channels_of_conv_tobereplaced = None
 
     def _replace_the_layer(self,model,n,new_layer):
         """
@@ -64,18 +69,28 @@ class Spitter:
                         new_layer = nn.AdaptiveAvgPool2d(int(math.sqrt(self.number_of_classes)))
                         model = self._replace_the_layer(model,n,new_layer)
                     if isinstance(module, nn.Conv2d):
-                        new_output_channels = self.construction_table[self.convolutional_iterator][
-                                                  "feature_pixels"] // self.number_of_classes
+                        new_output_channels = int(math.ceil(self.construction_table[self.convolutional_iterator][
+                                                  "feature_pixels"] / self.number_of_classes))
                         if not self.next_input_channels:
                             new_input_channels = module.in_channels
                         else:
                             new_input_channels = self.next_input_channels
-                        new_kernel_size = int(math.sqrt(
+                        new_kernel_size = int(math.ceil(math.sqrt(
                             self.construction_table[self.convolutional_iterator]["number_of_weights"] // (
-                                    new_input_channels * new_output_channels)))
+                                    new_input_channels * new_output_channels))))
                         if new_kernel_size**2 > self.number_of_classes:
-                            new_kernel_size = int(math.sqrt(self.number_of_classes))
-                            new_output_channels = int(self.construction_table[self.convolutional_iterator]["number_of_weights"] //(new_input_channels*new_kernel_size**2))
+                            #if Input channels equal to output channels, we cannot intervene into the balance
+                            if module.in_channels == module.out_channels and self.first_refined_layer:
+                                new_channels = int(math.ceil(math.sqrt(self.construction_table[self.convolutional_iterator]["number_of_weights"]/self.number_of_classes)))
+                                new_input_channels, new_output_channels = new_channels, new_channels
+                                new_kernel_size = int(math.ceil(math.sqrt(self.number_of_classes)))
+
+                                self.index_of_conv_needs_replacement = self.convolutional_iterator - 1
+                                self.output_channels_of_conv_tobereplaced = new_channels
+                            else:
+                                new_kernel_size = int(math.ceil(math.sqrt(self.number_of_classes)))
+                                new_output_channels = int(self.construction_table[self.convolutional_iterator]["number_of_weights"] //(new_input_channels*new_kernel_size**2))
+                            self.first_refined_layer = False
                         if self.is_optical:
                             new_layer = OpticalConv2d(new_input_channels,new_output_channels,new_kernel_size,True,True,input_size=int(math.sqrt(self.number_of_classes)))
                         else:
@@ -92,6 +107,39 @@ class Spitter:
                     if isinstance(module, nn.Linear):
                         new_layer = nn.Conv2d(in_channels=self.next_input_channels,out_channels=1,kernel_size=int(math.sqrt(self.number_of_classes)),padding="same")
                         model = self._replace_the_layer(model, n, new_layer)
+                self.i += 1
+        return model
+
+    def refine_on_of_the_layers(self, model):
+        """
+        Recursively converts the model into FatNet based on the construction table
+        :param model: original mode
+        :type nn.Module
+        :return: FatNet module
+        :rtype: nn.Module
+        """
+        for n, module in model.named_children():
+            if len(list(module.children())) > 0:
+                self.refine_on_of_the_layers(module)
+            else:
+                if self.i >= self.starting_point:
+                    if isinstance(module, nn.Conv2d):
+                        if self.convolutional_iterator == self.index_of_conv_needs_replacement:
+                            out_c = self.output_channels_of_conv_tobereplaced
+                            input_c = module.in_channels
+                            weights = self.construction_table[self.convolutional_iterator]["number_of_weights"]
+                            kernel_size = int(math.ceil(math.sqrt(weights/(input_c*out_c))))
+                            if self.is_optical:
+                                new_layer = OpticalConv2d(input_c, out_c, kernel_size, True,
+                                                          True, input_size=int(math.sqrt(self.number_of_classes)))
+                            else:
+                                new_layer = nn.Conv2d(input_c,out_c,kernel_size,padding="same")
+                            model = self._replace_the_layer(model, n, new_layer)
+                            self.next_input_channels = out_c
+                        self.convolutional_iterator += 1
+                    if self.convolutional_iterator-1 == self.index_of_conv_needs_replacement and isinstance(module, nn.BatchNorm2d):
+                        new_layer = nn.BatchNorm2d(self.next_input_channels)
+                        model = self._replace_the_layer(model,n,new_layer)
                 self.i += 1
         return model
 
@@ -115,6 +163,9 @@ class Spitter:
         """
         self.fatmodel = copy.deepcopy(self.original_model)
         self.fatmodel = self.replace_layers(self.fatmodel)
+        self.convolutional_iterator = 0
+        self.i = 0
+        self.fatmodel = self.refine_on_of_the_layers(self.fatmodel)
         self.fatmodel.zero_grad()
         #Need to add another layer of flatten to make the network trainable for classification
         self.fatmodel = self.add_flatten(self.fatmodel)

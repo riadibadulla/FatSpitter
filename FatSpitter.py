@@ -54,6 +54,6 @@ if __name__ == '__main__':
     model = ResNet().to(torch.device("cpu"))
     fat_model = fat_spitter(model,optical=False)
     print(fat_model)
-    # summary(fat_model, (3, 32, 32), device="cpu")
+    summary(fat_model, (3, 32, 32), device="cpu")
     print(get_number_of_conv_operations(model))
     print(get_number_of_conv_operations(fat_model))
