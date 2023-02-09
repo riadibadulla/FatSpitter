@@ -107,6 +107,7 @@ class Spitter:
                     if isinstance(module, nn.Linear):
                         new_layer = nn.Conv2d(in_channels=self.next_input_channels,out_channels=1,kernel_size=int(math.sqrt(self.number_of_classes)),padding="same")
                         model = self._replace_the_layer(model, n, new_layer)
+                        self.next_input_channels = 1
                 self.i += 1
         return model
 

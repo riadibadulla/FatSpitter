@@ -42,7 +42,7 @@ class ResNet(nn.Module):
         self.pool = nn.MaxPool2d(2)
         self.classifier = nn.Sequential(nn.Flatten(),
                                         nn.Dropout(p=0.2, inplace=False),
-                                        nn.Linear(512, 100))
+                                        nn.Linear(512, 256))
 
     def forward(self, x):
         x = self.conv1(x)
