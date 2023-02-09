@@ -27,7 +27,7 @@ def get_number_of_conv_operations(model):
 
     return conv_opps_sumer
 
-def fat_spitter(model,optical=False):
+def fat_spitter(model,input_size, number_of_classes, optical=False):
     """
     Turns any convolutional network into FatNet. Accepts any pytorch model object and spits out the FatNet model
     :param model: Pytorch's network object.
@@ -39,11 +39,11 @@ def fat_spitter(model,optical=False):
     """
     device = torch.device("cpu")
     model = model.to(device)
-    construction_table = Construction_table(model,100)
-    table, starting_point = construction_table(model, input_size=(3,32,32))
+    construction_table = Construction_table(model,number_of_classes)
+    table, starting_point = construction_table(model, input_size=input_size)
     for layer in table:
         print(layer)
-    spitter = Spitter(model,table,starting_point, 100, optical=optical)
+    spitter = Spitter(model,table,starting_point, number_of_classes, optical=optical)
     new_model = spitter()
     new_model.apply(lambda x: x)
     return new_model
@@ -52,7 +52,7 @@ def fat_spitter(model,optical=False):
 
 if __name__ == '__main__':
     model = ResNet().to(torch.device("cpu"))
-    fat_model = fat_spitter(model,optical=False)
+    fat_model = fat_spitter(model,input_size=(3,32,32), number_of_classes=100, optical=False)
     print(fat_model)
     summary(fat_model, (3, 32, 32), device="cpu")
     print(get_number_of_conv_operations(model))
