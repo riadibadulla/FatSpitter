@@ -3,10 +3,12 @@ import torch
 from Spitter import Spitter
 import Construction_table
 from Construction_table import Construction_table
-from models import ResNet
 from torchsummary import summary
 from torch import nn
 from optnn import OpticalConv2d
+#models
+from models import ResNet
+from models import contracting_UNet
 
 def get_number_of_conv_operations(model):
     """
@@ -51,9 +53,10 @@ def fat_spitter(model,input_size, number_of_classes, optical=False):
 
 
 if __name__ == '__main__':
-    model = ResNet().to(torch.device("cpu"))
+    model = contracting_UNet().to(torch.device("cuda"))
+    # model = ResNet().to(torch.device("cpu"))
     fat_model = fat_spitter(model,input_size=(3,32,32), number_of_classes=100, optical=False)
-    print(fat_model)
-    summary(fat_model, (3, 32, 32), device="cpu")
+    print(fat_model.cuda())
+    summary(fat_model, (3, 32, 32), device="cuda")
     print(get_number_of_conv_operations(model))
     print(get_number_of_conv_operations(fat_model))

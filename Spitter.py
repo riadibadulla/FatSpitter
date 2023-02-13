@@ -31,8 +31,9 @@ class Spitter:
         self.reference_to_previous_layer = None
         self.input_channels_of_previous_layer = None
         self.first_refined_layer = True
-        self.index_of_conv_needs_replacement = None
-        self.output_channels_of_conv_tobereplaced = None
+        self.refinement_dict = {}
+        # self.index_of_conv_needs_replacement = None
+        # self.output_channels_of_conv_tobereplaced = None
 
     def _replace_the_layer(self,model,n,new_layer):
         """
@@ -69,32 +70,38 @@ class Spitter:
                         new_layer = nn.AdaptiveAvgPool2d(int(math.sqrt(self.number_of_classes)))
                         model = self._replace_the_layer(model,n,new_layer)
                     if isinstance(module, nn.Conv2d):
-                        new_output_channels = int(math.ceil(self.construction_table[self.convolutional_iterator][
-                                                  "feature_pixels"] / self.number_of_classes))
+                        #new output channelels based on new number of pixels
                         if not self.next_input_channels:
                             new_input_channels = module.in_channels
                         else:
                             new_input_channels = self.next_input_channels
+                        new_output_channels = int(math.ceil(self.construction_table[self.convolutional_iterator][
+                                                                "feature_pixels"] / self.number_of_classes))
                         new_kernel_size = int(math.ceil(math.sqrt(
                             self.construction_table[self.convolutional_iterator]["number_of_weights"] // (
                                     new_input_channels * new_output_channels))))
-                        if new_kernel_size**2 > self.number_of_classes:
-                            #if Input channels equal to output channels, we cannot intervene into the balance
-                            if module.in_channels == module.out_channels and self.first_refined_layer:
-                                new_channels = int(math.ceil(math.sqrt(self.construction_table[self.convolutional_iterator]["number_of_weights"]/self.number_of_classes)))
+                        if module.in_channels == module.out_channels:
+                            if new_output_channels!=new_input_channels or new_kernel_size**2>self.number_of_classes:
+                                new_kernel_size = min(new_kernel_size, int(math.sqrt(self.number_of_classes)))
+                                #we devide by kernel size, unless its bigger than
+                                new_channels = int(math.ceil(math.sqrt(self.construction_table[self.convolutional_iterator][
+                                                                               "number_of_weights"] / new_kernel_size**2)))
                                 new_input_channels, new_output_channels = new_channels, new_channels
+                        else:
+                            if new_kernel_size**2>self.number_of_classes:
                                 new_kernel_size = int(math.ceil(math.sqrt(self.number_of_classes)))
-
-                                self.index_of_conv_needs_replacement = self.convolutional_iterator - 1
-                                self.output_channels_of_conv_tobereplaced = new_channels
-                            else:
-                                new_kernel_size = int(math.ceil(math.sqrt(self.number_of_classes)))
-                                new_output_channels = int(self.construction_table[self.convolutional_iterator]["number_of_weights"] //(new_input_channels*new_kernel_size**2))
-                            self.first_refined_layer = False
+                                new_output_channels = int(
+                                    self.construction_table[self.convolutional_iterator]["number_of_weights"] // (
+                                                new_input_channels * new_kernel_size ** 2))
+                            #and kernel is clipped get new out channels
                         if self.is_optical:
                             new_layer = OpticalConv2d(new_input_channels,new_output_channels,new_kernel_size,True,True,input_size=int(math.sqrt(self.number_of_classes)))
                         else:
                             new_layer = nn.Conv2d(new_input_channels,new_output_channels,new_kernel_size,padding="same")
+
+                        #if module.in_channels != new_in_channels the index of previous layer in the dictionary
+                        if self.next_input_channels != new_input_channels and self.next_input_channels:
+                            self.refinement_dict[self.convolutional_iterator - 1] = new_output_channels
                         model = self._replace_the_layer(model,n,new_layer)
                         self.next_input_channels = new_output_channels
                         self.convolutional_iterator += 1
@@ -125,8 +132,8 @@ class Spitter:
             else:
                 if self.i >= self.starting_point:
                     if isinstance(module, nn.Conv2d):
-                        if self.convolutional_iterator == self.index_of_conv_needs_replacement:
-                            out_c = self.output_channels_of_conv_tobereplaced
+                        if self.convolutional_iterator in self.refinement_dict.keys():
+                            out_c = self.refinement_dict[self.convolutional_iterator]
                             input_c = module.in_channels
                             weights = self.construction_table[self.convolutional_iterator]["number_of_weights"]
                             kernel_size = int(math.ceil(math.sqrt(weights/(input_c*out_c))))
@@ -138,7 +145,7 @@ class Spitter:
                             model = self._replace_the_layer(model, n, new_layer)
                             self.next_input_channels = out_c
                         self.convolutional_iterator += 1
-                    if self.convolutional_iterator-1 == self.index_of_conv_needs_replacement and isinstance(module, nn.BatchNorm2d):
+                    if self.convolutional_iterator-1 in self.refinement_dict.keys() and isinstance(module, nn.BatchNorm2d):
                         new_layer = nn.BatchNorm2d(self.next_input_channels)
                         model = self._replace_the_layer(model,n,new_layer)
                 self.i += 1
@@ -166,6 +173,7 @@ class Spitter:
         self.fatmodel = self.replace_layers(self.fatmodel)
         self.convolutional_iterator = 0
         self.i = 0
+        print(self.refinement_dict)
         self.fatmodel = self.refine_on_of_the_layers(self.fatmodel)
         self.fatmodel.zero_grad()
         #Need to add another layer of flatten to make the network trainable for classification

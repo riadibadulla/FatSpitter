@@ -14,6 +14,17 @@ import torch.nn.functional as F
 #     layers.append(nn.AdaptiveAvgPool2d(pool_size))
 #   return nn.Sequential(*layers)
 
+def double_conv_block(in_channels, out_channels, pool=True):
+  layers = [nn.Conv2d(in_channels, out_channels, kernel_size=3, padding="same"),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding="same"),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)]
+  if pool:
+    layers.append(nn.MaxPool2d(2))
+  return nn.Sequential(*layers)
+
 def conv_block(in_channels, out_channels, k=3 ,pool_size=0):
   layers = [nn.Conv2d(in_channels, out_channels, kernel_size=k, padding="same"),
             nn.BatchNorm2d(out_channels),
@@ -90,7 +101,32 @@ class FatNet(nn.Module):
         x = self.res5(x)+x
         x = self.classifier(x)
         return x
+class contracting_UNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.maxpool = nn.MaxPool2d(2)
+        self.conv1 = double_conv_block(3,64, pool=False)
+        self.conv2 = double_conv_block(64,128, pool=False)
+        self.conv3 = double_conv_block(128,256, pool=False)
+        self.conv4 = double_conv_block(256,512, pool=False)
+        self.conv5 = double_conv_block(512,1024, pool=False)
 
+    def forward(self, x):
+        x1 = self.conv1(x)
+        x2 = self.conv2(self.maxpool(x1))
+        x3 = self.conv3(self.maxpool(x2))
+        x4 = self.conv4(self.maxpool(x3))
+        x = self.conv5(self.maxpool(x4))
+        # x = self.deconv1(x)
+        # x = self.conv6(torch.cat((x4,x),dim=1))
+        # x = self.deconv2(x)
+        # x = self.conv7(torch.cat((x3,x),dim=1))
+        # x = self.deconv3(x)
+        # x = self.conv8(torch.cat((x2,x),dim=1))
+        # x = self.deconv4(x)
+        # x = self.conv9(torch.cat((x1,x),dim=1))
+        # x = self.segmenter(x)
+        return x
 
 # class Optica_FatNet(nn.Module):
 #     def __init__(self):
