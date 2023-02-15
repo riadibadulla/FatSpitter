@@ -55,7 +55,8 @@ def fat_spitter(model,input_size, number_of_classes, optical=False):
 if __name__ == '__main__':
     model = contracting_UNet().to(torch.device("cuda"))
     # model = ResNet().to(torch.device("cpu"))
-    fat_model = fat_spitter(model,input_size=(3,32,32), number_of_classes=100, optical=False)
+    # fat_model = fat_spitter(model,input_size=(3,32,32), number_of_classes=100, optical=False)
+    fat_model = fat_spitter(model, input_size=(3, 160, 160), number_of_classes=25600, optical=False)
     print(fat_model.cuda())
     summary(fat_model, (3, 32, 32), device="cuda")
     print(get_number_of_conv_operations(model))
