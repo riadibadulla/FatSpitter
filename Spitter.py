@@ -186,12 +186,13 @@ class Spitter:
         """
         self.fatmodel = copy.deepcopy(self.original_model)
         self.fatmodel = self.replace_layers(self.fatmodel)
-        self.convolutional_iterator = min(self.refinement_dict.keys())
-        self.i = 0
-        print(self.fatmodel)
-        print(self.refinement_dict)
-        print(self.refinement_index_to_convid)
-        self.fatmodel = self.refine_on_of_the_layers(self.fatmodel)
+        if bool(self.refinement_dict):
+            self.convolutional_iterator = min(self.refinement_dict.keys())
+            self.i = 0
+            print(self.fatmodel)
+            print(self.refinement_dict)
+            print(self.refinement_index_to_convid)
+            self.fatmodel = self.refine_on_of_the_layers(self.fatmodel)
         self.fatmodel.zero_grad()
         #Need to add another layer of flatten to make the network trainable for classification
         self.fatmodel = self.add_flatten(self.fatmodel)

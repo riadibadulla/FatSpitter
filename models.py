@@ -14,6 +14,51 @@ import torch.nn.functional as F
 #     layers.append(nn.AdaptiveAvgPool2d(pool_size))
 #   return nn.Sequential(*layers)
 
+# class AlexNet(nn.Module):
+#
+#     def __init__(self):
+#         super().__init__()
+#         self.conv1 = nn.Conv2d(3,96,kernel_size=11)
+#         self.conv2= nn.Conv2d(96,256,kernel_size=5)
+#         self.conv3 = nn.Conv2d(256,384,kernel_size=3)
+#         self.conv4 = nn.Conv2d(384,384,kernel_size=3)
+#         self.conv5 = nn.Conv2d(384, 256, kernel_size=3)
+
+
+class AlexNet(nn.Module):
+    def __init__(self, num_classes=1000):
+        super(AlexNet, self).__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=11, padding="same"),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(64, 192, kernel_size=5, padding="same"),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(192, 384, kernel_size=3, padding="same"),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(384, 256, kernel_size=3, padding="same"),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding="same"),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2),
+            nn.Flatten()
+        )
+        self.classifier = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(4096, num_classes),
+            # nn.ReLU(inplace=True),
+            # nn.Dropout(),
+            # nn.Linear(4096, 4096),
+            # nn.ReLU(inplace=True),
+            # nn.Linear(4096, num_classes),
+        )
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.classifier(x)
+        return x
+
 def double_conv_block(in_channels, out_channels, pool=True):
   layers = [nn.Conv2d(in_channels, out_channels, kernel_size=3, padding="same"),
             nn.BatchNorm2d(out_channels),
